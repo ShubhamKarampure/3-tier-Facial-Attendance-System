@@ -1,8 +1,32 @@
-# React + Vite
+# Frontend - Facial Attendance System
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## Overview
+The frontend of the **Facial Attendance System** is built using React and serves as the user interface for capturing images and sending them to the backend for facial recognition.
 
-Currently, two official plugins are available:
+## Features
+- Captures images using the webcam.
+- Sends images to the backend for authentication.
+- Displays attendance confirmation status.
+- Ensures a seamless user experience with an intuitive interface.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Prerequisites
+- Node.js and npm installed.
+
+## Installation and Setup
+```sh
+# Install dependencies
+npm install
+
+# Start the development server
+npm run dev
+```
+
+## Permissions
+- Ensure the browser has permission to access the webcam.
+- Allow camera usage when prompted by the browser.
+
+## Environment Variables
+- Configure API endpoint in `.env` file to connect with the backend.
+
+## Next Steps
+Refer to the backend README for API details and response handling.
