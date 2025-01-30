@@ -1,0 +1,55 @@
+# Python bytecode files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Flask instance folder (for production deployments)
+instance/
+
+# Virtual environment directory
+venv/
+.env/
+.venv/
+ENV/
+
+# Flask upload folder
+uploads/
+
+# SQLite database file
+*.db
+
+# Logs and temporary files
+*.log
+*.bak
+*.swp
+*.swo
+
+# PyCharm project files
+.idea/
+
+# VSCode project files
+.vscode/
+
+# macOS specific files
+.DS_Store
+
+# Windows specific files
+Thumbs.db
+ehthumbs.db
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Backup files
+*.bak
+
+# Test results
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+*.hypothesis/
+
+# Environment configuration files
+*.env
