@@ -2,6 +2,18 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Camera, X, Check, Search, UserPlus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
+const ErrorMessage = ({ message }) => (
+  <motion.div
+    initial={{ opacity: 0, y: -20 }}
+    animate={{ opacity: 1, y: 0 }}
+    exit={{ opacity: 0, y: -20 }}
+    transition={{ duration: 0.2 }}
+    className="fixed top-4 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50"
+  >
+    <p className="font-medium">{message}</p>
+  </motion.div>
+);
+
 const CameraSection = ({
   mode,
   showCamera,
@@ -9,7 +21,8 @@ const CameraSection = ({
   status,
   setStatus,
   registrationData,
-  setRegistrationData
+  setRegistrationData,
+  refreshAttendance
 }) => {
   const [matchedPerson, setMatchedPerson] = useState(null);
   const [capturedImage, setCapturedImage] = useState(null);
@@ -18,46 +31,85 @@ const CameraSection = ({
   const [isClosing, setIsClosing] = useState(false);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
-  const errorTimeoutRef = useRef(null);
 
   useEffect(() => {
-    if (showCamera && videoRef.current && !capturedImage) {
+    if (showCamera) {
       initializeCamera();
     }
-
     return () => {
-      if (errorTimeoutRef.current) {
-        clearTimeout(errorTimeoutRef.current);
-      }
+      stopWebcam();
     };
-  }, [showCamera, capturedImage]);
-
-  useEffect(() => {
-    if (error) {
-      if (errorTimeoutRef.current) {
-        clearTimeout(errorTimeoutRef.current);
-      }
-      errorTimeoutRef.current = setTimeout(() => {
-        setError(null);
-      }, 2000);
-    }
-  }, [error]);
+  }, [showCamera]);
 
   const initializeCamera = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: 1280,
-          height: 720,
-          facingMode: "user"
-        }
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'user' } 
       });
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
       }
+    } catch (err) {
+      setError('Failed to access camera. Please ensure camera permissions are granted.');
+      console.error('Camera access error:', err);
+    }
+  };
+
+  const stopWebcam = () => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      const tracks = videoRef.current.srcObject.getTracks();
+      tracks.forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+    }
+  };
+
+  const captureImage = () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      
+      const context = canvas.getContext('2d');
+      context.scale(-1, 1); // Flip horizontally
+      context.translate(-canvas.width, 0);
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      const imageData = canvas.toDataURL('image/jpeg');
+      setCapturedImage(imageData);
+      return imageData;
+    }
+    return null;
+  };
+
+  const markAttendance = async (imageData) => {
+    const blob = await fetch(imageData).then(r => r.blob());
+    const formData = new FormData();
+    formData.append("face_image", blob, "capture.jpg");
+    
+    try {
+      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/mark_attendance`, {
+        method: "POST",
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Attendance marking failed');
+      }
+      
+      const result = await response.json();
+      
+      // Update the matched person state with the response data
+      setMatchedPerson({
+        name: result.user.name,
+        time: result.user.time,
+        
+      });
+      
+      return result;
     } catch (error) {
-      console.error("Error accessing webcam: ", error);
-      setError("Could not access webcam");
+      throw new Error(error.message || 'Attendance marking failed');
     }
   };
 
@@ -79,61 +131,12 @@ const CameraSection = ({
         throw new Error(errorData.error || 'Registration failed');
       }
       
-      return await response.json();
+      const result = await response.json();
+      setRegisteredImage(imageData);
+      setRegistrationData({ name: '', rollNumber: '' });
+      return result;
     } catch (error) {
       throw new Error(error.message || 'Registration failed');
-    }
-  };
-
-  const markAttendance = async (imageData) => {
-    const blob = await fetch(imageData).then(r => r.blob());
-    const formData = new FormData();
-    formData.append("face_image", blob, "capture.jpg");
-    
-    try {
-      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/mark_attendance`, {
-        method: "POST",
-        body: formData,
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Attendance marking failed');
-      }
-      
-      return await response.json();
-    } catch (error) {
-      throw new Error(error.message || 'Attendance marking failed');
-    }
-  };
-
-  const stopWebcam = () => {
-    const stream = videoRef.current?.srcObject;
-    if (stream) {
-      const tracks = stream.getTracks();
-      tracks.forEach(track => track.stop());
-      videoRef.current.srcObject = null;
-    }
-  };
-
-  const captureImage = () => {
-    if (videoRef.current && canvasRef.current) {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      
-      const context = canvas.getContext('2d');
-      context.scale(-1, 1);
-      context.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
-      context.scale(-1, 1);
-      
-      const imageData = canvas.toDataURL('image/jpeg');
-      setCapturedImage(imageData);
-      stopWebcam();
-      
-      return imageData;
     }
   };
 
@@ -144,18 +147,14 @@ const CameraSection = ({
 
     try {
       if (mode === 'attendance') {
-        const result = await markAttendance(imageData);
-        setMatchedPerson({
-          name: result.user.name,
-          time: result.user.time,
-          date: result.user.date
-        });
+        await markAttendance(imageData);
       } else if (mode === 'register') {
-        const result = await registerUser(imageData);
+        await registerUser(imageData);
         setRegisteredImage(imageData);
       }
       
       setStatus('success');
+      await refreshAttendance();
       
       setTimeout(() => {
         setStatus('idle');
@@ -166,7 +165,7 @@ const CameraSection = ({
         }
       }, 2000);
     } catch (error) {
-      console.error('Operation failed:', error);
+      console.log(error)
       setError(error.message);
       setStatus('idle');
       setCapturedImage(null);
@@ -188,18 +187,6 @@ const CameraSection = ({
       setIsClosing(false);
     }
   };
-
-  const ErrorMessage = ({ message }) => (
-    <motion.div
-      initial={{ opacity: 0, y: -20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      transition={{ duration: 0.2 }}
-      className="fixed top-4 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50"
-    >
-      <p className="font-medium">{message}</p>
-    </motion.div>
-  );
 
   if (!showCamera) {
     return (
@@ -317,7 +304,7 @@ const CameraSection = ({
                         <p className="text-lg text-white/90">Attendance Marked Successfully</p>
                         <div className="mt-4 text-sm text-white/80">
                           <p>{matchedPerson.time}</p>
-                          <p>{matchedPerson.date}</p>
+                         
                         </div>
                       </motion.div>
                     ) : (

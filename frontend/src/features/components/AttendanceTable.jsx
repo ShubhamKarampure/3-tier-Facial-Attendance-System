@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ChevronDown, ChevronUp, Search, Calendar } from 'lucide-react';
 
 const AttendanceTable = ({ attendanceData }) => {
@@ -15,14 +15,16 @@ const AttendanceTable = ({ attendanceData }) => {
     }
   };
 
-  const filteredData = attendanceData.filter(student =>
-    student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    student.rollNumber.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredData = Array.isArray(attendanceData)
+    ? attendanceData.filter(student =>
+        student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        student.rollNumber.toLowerCase().includes(searchTerm.toLowerCase())
+      )
+    : [];
 
   const sortedData = [...filteredData].sort((a, b) => {
     if (!sortColumn) return 0;
-    
+
     const factor = sortDirection === 'asc' ? 1 : -1;
     return a[sortColumn] > b[sortColumn] ? factor : -factor;
   });
@@ -57,55 +59,55 @@ const AttendanceTable = ({ attendanceData }) => {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-gray-50">
-            <tr>
-              {[
-                { key: 'rollNumber', label: 'Roll Number' },
-                { key: 'name', label: 'Name' },
-                { key: 'status', label: 'Status' },
-                { key: 'time', label: 'Time' }
-              ].map(({ key, label }) => (
-                <th
-                  key={key}
-                  onClick={() => handleSort(key)}
-                  className="px-6 py-3 text-left text-sm font-semibold text-gray-600 cursor-pointer hover:bg-gray-100 transition-colors"
-                >
-                  <div className="flex items-center gap-1">
-                    {label}
-                    <SortIcon column={key} />
-                  </div>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {sortedData.map((student) => (
-              <tr 
-                key={student.id} 
-                className="hover:bg-gray-50 transition-colors"
-              >
-                <td className="px-6 py-4 text-sm text-gray-700">{student.rollNumber}</td>
-                <td className="px-6 py-4 text-sm text-gray-700 font-medium">{student.name}</td>
-                <td className="px-6 py-4 text-sm">
-                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium transition-all
-                    ${student.status === 'Present' 
-                      ? 'bg-green-100 text-green-700 ring-1 ring-green-600/20' 
-                      : 'bg-red-100 text-red-700 ring-1 ring-red-600/20'
-                    }`}>
-                    {student.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-sm text-gray-700">{student.time}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        
-        {sortedData.length === 0 && (
+        {attendanceData.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
-            No matching records found
+            No user loaded
           </div>
+        ) : (
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                {[ 
+                  { key: 'rollNumber', label: 'Roll Number' },
+                  { key: 'name', label: 'Name' },
+                  { key: 'attendance_status', label: 'Status' },
+                  { key: 'time', label: 'Time' }
+                ].map(({ key, label }) => (
+                  <th
+                    key={key}
+                    onClick={() => handleSort(key)}
+                    className="px-6 py-3 text-left text-sm font-semibold text-gray-600 cursor-pointer hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="flex items-center gap-1">
+                      {label}
+                      <SortIcon column={key} />
+                    </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {sortedData.map((student) => (
+                <tr 
+                  key={student.id} 
+                  className="hover:bg-gray-50 transition-colors"
+                >
+                  <td className="px-6 py-4 text-sm text-gray-700">{student.rollNumber}</td>
+                  <td className="px-6 py-4 text-sm text-gray-700 font-medium">{student.name}</td>
+                  <td className="px-6 py-4 text-sm">
+                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium transition-all
+                      ${student.attendance_status === 'Present' 
+                        ? 'bg-green-100 text-green-700 ring-1 ring-green-600/20' 
+                        : 'bg-red-100 text-red-700 ring-1 ring-red-600/20'
+                      }`}>
+                      {student.attendance_status}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-700">{student.time}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
     </div>

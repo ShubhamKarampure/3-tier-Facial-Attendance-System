@@ -21,38 +21,37 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 # Database connection function
 def get_db_connection():
     return psycopg2.connect(
-        host="localhost",
+        host="192.168.1.179",
         database="postgres",
         user="postgres",
-        password="admin"
+        password="root"
     )
 
 # Database initialization
 def init_db():
     conn = get_db_connection()
     c = conn.cursor()
-    
+
     # Create users table
     c.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
             name TEXT NOT NULL,
             roll_number TEXT UNIQUE NOT NULL,
-            face_embedding TEXT NOT NULL,
+            face_embedding BYTEA NOT NULL,
             image_path TEXT NOT NULL
         )
     ''')
 
-    # Create attendance table
+    # Create attendance table with fixed default status value
     c.execute('''
         CREATE TABLE IF NOT EXISTS attendance (
             id SERIAL PRIMARY KEY,
             user_id INTEGER REFERENCES users(id),
-            date DATE NOT NULL,
-            time TIME NOT NULL
+            status BOOLEAN DEFAULT FALSE,  -- False for absent, True for present
+            time TIME NULL
         )
     ''')
-
     conn.commit()
     conn.close()
 
@@ -119,8 +118,15 @@ def register():
 
             # Insert into PostgreSQL database
             c.execute(
-                "INSERT INTO users (name, roll_number, face_embedding, image_path) VALUES (%s, %s, %s, %s)",
+                "INSERT INTO users (name, roll_number, face_embedding, image_path) VALUES (%s, %s, %s, %s) RETURNING id",
                 (name, roll_number, embedding_bytes, filepath)
+            )
+            user_id = c.fetchone()[0]  # Get the generated user ID
+
+            # Insert attendance record with "absent" status and NULL for time
+            c.execute(
+                "INSERT INTO attendance (user_id, status, time) VALUES (%s, %s, NULL)",
+                (user_id, False)  # Mark as absent and time as NULL
             )
 
             conn.commit()
@@ -161,10 +167,8 @@ def mark_attendance():
             c = conn.cursor()
             c.execute("SELECT id, name, roll_number, face_embedding, image_path FROM users")
             users = c.fetchall()
-            print(users)
 
             for user_id, name, roll_number, stored_embedding_bytes, stored_image_path in users:
-                print(user_id)
                 try:
                     # Verify using stored image path
                     similarity = DeepFace.verify(
@@ -174,16 +178,31 @@ def mark_attendance():
                         enforce_detection=True,
                         distance_metric="cosine"
                     )
-                    print(similarity)
 
                     if similarity['verified']:
                         now = datetime.now()
-
-                        c.execute(
-                            "INSERT INTO attendance (user_id, date, time) VALUES (%s, %s, %s)",
-                            (user_id, now.date(), now.strftime('%H:%M:%S'))
-                        )
                         
+                        # Check if attendance is already marked as present
+                        c.execute("""
+                            SELECT 1 FROM attendance 
+                            WHERE user_id = %s 
+                            AND status = TRUE
+                        """, (user_id,))
+                        
+                        if c.fetchone():
+                            os.remove(temp_filepath)
+                            conn.close()
+                            return jsonify({
+                                'error': 'Attendance already marked present'
+                            }), 400
+
+                        # Update attendance status from absent to present
+                        c.execute("""
+                            UPDATE attendance 
+                            SET status = TRUE, time = %s
+                            WHERE user_id = %s AND status = FALSE
+                        """, (now.strftime('%H:%M:%S'), user_id))
+
                         conn.commit()
                         os.remove(temp_filepath)
                         conn.close()
@@ -193,8 +212,7 @@ def mark_attendance():
                             'user': {
                                 'name': name,
                                 'roll_number': roll_number,
-                                'date': now.date().isoformat(),
-                                'time': now.strftime('%H:%M:%S')
+                                'time': now.strftime('%H:%M:%S') 
                             }
                         }), 200
                         
@@ -208,6 +226,40 @@ def mark_attendance():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/get_all_attendance', methods=['GET'])
+def get_all_attendance():
+    try:
+        conn = get_db_connection()
+        query = '''
+        SELECT u.roll_number, u.name, a.time, 
+                CASE 
+                    WHEN a.status = FALSE THEN 'Absent' 
+                    ELSE 'Present' 
+                END AS attendance_status
+        FROM attendance a
+        JOIN users u ON a.user_id = u.id
+        ORDER BY a.id ASC;
+        '''
+        c = conn.cursor()
+        c.execute(query)
+        attendance_data = c.fetchall()
+
+        attendance_list = []
+        for row in attendance_data:
+            attendance_list.append({
+                'roll_number':row[0],
+                'name': row[1],
+                'time': row[2].strftime('%H:%M:%S') if row[2] else None,
+                'attendance_status': row[3]
+            })
+
+        # Close the connection
+        conn.close()
+        return jsonify({'attendance': attendance_list}), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    
 if __name__ == '__main__':
     init_db()
     app.run(host="0.0.0.0", port=5000, debug=True)
