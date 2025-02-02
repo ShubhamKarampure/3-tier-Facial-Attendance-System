@@ -24,7 +24,7 @@ def get_db_connection():
         host="localhost",
         database="postgres",
         user="postgres",
-        password="root"
+        password="admin"
     )
 
 # Database initialization
@@ -161,12 +161,11 @@ def mark_attendance():
             c = conn.cursor()
             c.execute("SELECT id, name, roll_number, face_embedding, image_path FROM users")
             users = c.fetchall()
+            print(users)
 
             for user_id, name, roll_number, stored_embedding_bytes, stored_image_path in users:
+                print(user_id)
                 try:
-                    # Convert stored embedding back to numpy array
-                    stored_embedding = np.frombuffer(stored_embedding_bytes)
-
                     # Verify using stored image path
                     similarity = DeepFace.verify(
                         img1_path=temp_filepath,
@@ -175,39 +174,30 @@ def mark_attendance():
                         enforce_detection=True,
                         distance_metric="cosine"
                     )
+                    print(similarity)
 
                     if similarity['verified']:
                         now = datetime.now()
 
-                        # Check if attendance was already marked within the last 30 minutes
-                        c.execute("""
-                            SELECT id FROM attendance 
-                            WHERE user_id = %s AND date = %s AND time >= (NOW() - INTERVAL '30 minutes')
-                        """, (user_id, now.date()))
+                        c.execute(
+                            "INSERT INTO attendance (user_id, date, time) VALUES (%s, %s, %s)",
+                            (user_id, now.date(), now.strftime('%H:%M:%S'))
+                        )
+                        
+                        conn.commit()
+                        os.remove(temp_filepath)
+                        conn.close()
 
-                        if c.fetchone() is None:
-                            c.execute(
-                                "INSERT INTO attendance (user_id, date, time) VALUES (%s, %s, %s)",
-                                (user_id, now.date(), now.strftime('%H:%M:%S'))
-                            )
-                            conn.commit()
-                            os.remove(temp_filepath)
-                            conn.close()
-
-                            return jsonify({
-                                'message': 'Attendance marked successfully',
-                                'user': {
-                                    'name': name,
-                                    'roll_number': roll_number,
-                                    'date': now.date().isoformat(),
-                                    'time': now.strftime('%H:%M:%S')
-                                }
-                            }), 200
-                        else:
-                            os.remove(temp_filepath)
-                            conn.close()
-                            return jsonify({'error': 'Attendance already marked in the last 30 minutes'}), 400
-
+                        return jsonify({
+                            'message': 'Attendance marked successfully',
+                            'user': {
+                                'name': name,
+                                'roll_number': roll_number,
+                                'date': now.date().isoformat(),
+                                'time': now.strftime('%H:%M:%S')
+                            }
+                        }), 200
+                        
                 except Exception:
                     continue
 
@@ -220,4 +210,4 @@ def mark_attendance():
 
 if __name__ == '__main__':
     init_db()
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True)
